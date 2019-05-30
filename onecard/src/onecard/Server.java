@@ -35,7 +35,6 @@ public class Server extends JFrame {
 	private Card topCard = null;
 	private int penaltyNum = 0;
 	private int turnOpt = 1;
-	private boolean win = false;
 
 	private JPanel contentPane;
 	private JTextArea textArea;
@@ -151,7 +150,6 @@ public class Server extends JFrame {
 							}
 							newDeck(); // 새덱 생성
 							shuffle(); // 덱 셔플
-							Thread.sleep(2000);
 							for (User u : playerList) {
 								giveCard(INIT_CARD_NUM, u); // 시작카드 분배
 							}
@@ -163,41 +161,37 @@ public class Server extends JFrame {
 									turn += PLAYER_NUM;
 								}
 								User user = playerList.get(currPlayer);
+								sendSth(107, "int", currPlayer);// []님이 카드를 선택중... 신호보내기
 								ObjectInputStream ois = user.getOis();
 								giveTurn(user);
 								try {
 									turn: while (true) {
 										int answer = ois.readInt();
 										switch (answer) {
-										case 203: // 게임시작요청 받음
-											break;
 										case 201: // 플레이어로부터 카드 1장 받기
 											getCard(ois);
 											sendPenalty();
 											break turn;
-										case 202: // 플레이어가 카드 받아야함
+										case 202: // 플레이어에게 카드 주기
 											giveCard(penaltyNum, user);
 											break turn;
 										}
 									}
-									getUserRemain(user);
-									if (win) {
+									if (!hasCard(user)) {
 										break;
 									}
 									turn += turnOpt;
 									currPlayer = turn % PLAYER_NUM;
+									sendSth(115);//[]님이 카드를 선택중... 스레드 종료명령
 
 								} catch (IOException e) {
 									addLog("IOException 발생");
 									e.printStackTrace();
-									continue;
 								}
 							}
 							addLog("----------- 게임 종료 -----------");
-							sendObject(105, "String", playerList.get(currPlayer).getName());
+							sendSth(105, "String", playerList.get(currPlayer).getName());
 						} catch (IOException e) {
-							e.printStackTrace();
-						} catch (InterruptedException e) {
 							e.printStackTrace();
 						} finally {
 							try {
@@ -218,8 +212,18 @@ public class Server extends JFrame {
 
 	}
 
+	private boolean hasCard(User u) {
+		if (u.getCardNum() == 0) {
+			addLog("[" + u.getName() + "]님이 승리하였습니다 !!");
+			return false;
+		} else {
+			addLog("[" + u.getName() + "]님의 남은 카드 수 : " + u.getCardNum());
+		}
+		return true;
+	}
+
 	// 모든 플레이어에게 code와 해당 content를 보내는 메서드
-	private void sendObject(int code, String type, Object content) {
+	private void sendSth(int code, String type, Object content) {
 		for (User u : playerList) {
 			ObjectOutputStream oos = u.getOos();
 			try {
@@ -234,6 +238,9 @@ public class Server extends JFrame {
 				case "Object":
 					oos.writeObject(content);
 					break;
+				case "boolean":
+					oos.writeBoolean((boolean) content);
+					break;
 				default:
 					break;
 				}
@@ -244,16 +251,28 @@ public class Server extends JFrame {
 		}
 	}
 
+	private void sendSth(int code) {
+		for (User u : playerList) {
+			ObjectOutputStream oos = u.getOos();
+			try {
+				oos.writeInt(code);
+				oos.flush();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
 	private void getEnoughDeck(int num) {
 		if (deck.size() < num) {
 			announce("덱에 카드가 없으므로 사용한 카드를 섞어 보충합니다.");
+			shuffle();
 			List<Card> temp = new ArrayList<Card>();
 			temp.addAll(usedCards);
 			temp.remove(topCard);
 			deck.addAll(temp);
 			usedCards.clear();
 			usedCards.add(topCard);
-			shuffle();
 			for (User u : playerList) {
 				ObjectOutputStream oos = u.getOos();
 				try {
@@ -266,34 +285,34 @@ public class Server extends JFrame {
 	}
 
 	private void sendPenalty() {
-		sendObject(108, "int", penaltyNum);
+		sendSth(108, "int", penaltyNum);
 	}
 
-	private void getUserRemain(User user) {
-		try {
-			int code = 107;
-			int cardNum = user.getOis().readInt();
-			if (cardNum == 0) {
-				addLog("[" + user.getName() + "]가 승리하였습니다 !!");
-				win = true;
-			} else {
-				addLog("[" + user.getName() + "]의 남은 카드 수 : " + cardNum);
-				for (User other : playerList) {
-					ObjectOutputStream oos = (ObjectOutputStream) other.getOos();
-					if (other.equals(user)) {
-						continue;
-					} else {
-						oos.writeInt(code);
-						oos.writeInt(playerList.indexOf(user));
-						oos.writeInt(cardNum);
-						oos.flush();
-					}
-				}
-			}
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-	}
+//	private void getUserRemain(User user) {
+//		try {
+//			int code = 107;
+//			int cardNum = user.getOis().readInt();
+//			if (cardNum == 0) {
+//				addLog("[" + user.getName() + "]가 승리하였습니다 !!");
+//				win = true;
+//			} else {
+//				addLog("[" + user.getName() + "]의 남은 카드 수 : " + cardNum);
+//				for (User other : playerList) {
+//					ObjectOutputStream oos = (ObjectOutputStream) other.getOos();
+//					if (other.equals(user)) {
+//						continue;
+//					} else {
+//						oos.writeInt(code);
+//						oos.writeInt(playerList.indexOf(user));
+//						oos.writeInt(cardNum);
+//						oos.flush();
+//					}
+//				}
+//			}
+//		} catch (IOException e) {
+//			e.printStackTrace();
+//		}
+//	}
 
 	private void giveTurn(User user) {
 		int code = 102;
@@ -358,6 +377,8 @@ public class Server extends JFrame {
 				announce("JOKER카드이므로 5장 공격합니다.");
 				penaltyNum += 5;
 			}
+			playerList.get(currPlayer).setCardNum(playerList.get(currPlayer).getCardNum() - 1);
+			sendUserCardNum(currPlayer, playerList.get(currPlayer).getCardNum());
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
 		} catch (IOException e) {
@@ -413,7 +434,6 @@ public class Server extends JFrame {
 		if (num == 0) {
 			num = 1;
 		}
-		user.setCardNum(user.getCardNum() + num); // playerList 카드 수 추가
 		getEnoughDeck(num); // 덱에 num장 이상 있는지 체크
 		int code = 101;
 		ObjectOutputStream oos = user.getOos();
@@ -425,6 +445,7 @@ public class Server extends JFrame {
 				oos.writeObject(deck.get(0));
 				deck.remove(0);
 				oos.flush();
+				user.setCardNum((user.getCardNum() + 1)); // playerList 카드 수 추가
 			}
 			penaltyNum = 0;
 			sendPenalty();
@@ -432,30 +453,39 @@ public class Server extends JFrame {
 			e.printStackTrace();
 		}
 		sendDeckNum();
-		sendUserCardNum();
+		sendUserCardNum(playerList.indexOf(user), user.getCardNum());
+		addLog("" + user.getCardNum());
 		addLog("[" + user.getName() + "]님이 카드를" + num + "장 먹었습니다.\nDECK에 남은 카드 수 : " + deck.size());
 		announce("[" + user.getName() + "]님이 카드를" + num + "장 먹었습니다.\nDECK에 남은 카드 수 : " + deck.size());
 	}
 
-	private void sendUserCardNum() {
+	private void sendUserCardNum(int userIdx, int userCardNum) {
 		int code = 113;
-		ObjectOutputStream oos = playerList.get(currPlayer).getOos();
-		try {
-			oos.writeInt(code);
-			oos.writeInt(currPlayer);
-			oos.writeInt(playerList.get(currPlayer).getCardNum());
-			oos.flush();
-		} catch (IOException e) {
-			e.printStackTrace();
+		for (User u : playerList) {
+			ObjectOutputStream oos = u.getOos();
+			try {
+				oos.writeInt(code);
+				oos.writeInt(userIdx);
+				oos.writeInt(userCardNum);
+				oos.flush();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
 		}
 	}
 
 	private void sendDeckNum() {
-		sendObject(112, "int", deck.size());
+		sendSth(112, "int", deck.size());
 	}
 
 	private void shuffle() {
 		Collections.shuffle(deck);
+		sendSth(114);
+		try {
+			Thread.sleep(2800);
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
 	}
 
 	private void setTopCard(Card card) {// 플레이어가 제출한 카드 세팅
@@ -476,11 +506,11 @@ public class Server extends JFrame {
 	}
 
 	private void sendTopCard() {
-		sendObject(104, "Object", topCard);
+		sendSth(104, "Object", topCard);
 	}
 
 	private void sendTopCard(String shape) {
-		sendObject(104, "Object", new Card(shape));
+		sendSth(104, "Object", new Card(shape));
 	}
 
 	private void addLog(String str) {
@@ -489,6 +519,6 @@ public class Server extends JFrame {
 	}
 
 	private void announce(String text) {
-		sendObject(103, "String", "[알림]" + text);
+		sendSth(103, "String", "[알림]" + text);
 	}
 }

@@ -51,7 +51,6 @@ public class PlayerFrame extends JFrame {
 	private ObjectOutputStream oos = null;
 	private List<User> userList = null;
 	private Card topCard = null;
-	private int userIndex = -1;
 	private int maxUser = -1;
 	private int nowUserNum = -1;
 	private boolean hasTurn = false;
@@ -61,6 +60,7 @@ public class PlayerFrame extends JFrame {
 	private int myIdx = -1;
 	private int nextUserIdx;
 	private int prevUserIdx;
+	private Spinner s;
 
 	private JPanel contentPane;
 	private JTextField ServerIP;
@@ -83,6 +83,7 @@ public class PlayerFrame extends JFrame {
 	private JButton deckBtn;
 	private JLabel deckLabel;
 	private JPanel penaltyArea;
+	private JLabel loading;
 
 	/**
 	 * Launch the application.
@@ -186,6 +187,7 @@ public class PlayerFrame extends JFrame {
 		prevUserSpace.setLayout(null);
 
 		prevUserLabel = new JLabel("");
+		prevUserLabel.setForeground(new Color(128, 128, 128));
 		prevUserLabel.setBounds(10, 5, 105, 15);
 		prevUserSpace.add(prevUserLabel);
 
@@ -194,7 +196,7 @@ public class PlayerFrame extends JFrame {
 		prevUserSpace.add(prevUserCardNum);
 
 		JPanel prevUserPane = new JPanel();
-		prevUserPane.setBounds(0, 47, 88, 192);
+		prevUserPane.setBounds(-28, 47, 88, 192);
 		prevUserSpace.add(prevUserPane);
 		prevUserPane.setLayout(null);
 
@@ -208,6 +210,7 @@ public class PlayerFrame extends JFrame {
 		nextUserSpace.setLayout(null);
 
 		nextUserLabel = new JLabel("");
+		nextUserLabel.setForeground(new Color(128, 128, 128));
 		nextUserLabel.setBounds(0, 5, 105, 15);
 		nextUserSpace.add(nextUserLabel);
 		nextUserLabel.setHorizontalAlignment(SwingConstants.RIGHT);
@@ -218,7 +221,7 @@ public class PlayerFrame extends JFrame {
 		nextUserCardNum.setHorizontalAlignment(SwingConstants.RIGHT);
 
 		JPanel nextUserPane = new JPanel();
-		nextUserPane.setBounds(95, 12, 1, 1);
+		nextUserPane.setBounds(60, 47, 88, 192);
 		nextUserSpace.add(nextUserPane);
 		nextUserPane.setLayout(null);
 
@@ -284,7 +287,8 @@ public class PlayerFrame extends JFrame {
 		penaltyNum.setHorizontalAlignment(SwingConstants.RIGHT);
 
 		JLabel penalty = new JLabel("공격 카드 수 :");
-		penalty.setBounds(12, 5, 76, 15);
+		penalty.setHorizontalAlignment(SwingConstants.RIGHT);
+		penalty.setBounds(0, 5, 95, 15);
 		penaltyArea.add(penalty);
 
 		Canvas canvas = new Canvas();
@@ -322,17 +326,25 @@ public class PlayerFrame extends JFrame {
 		scrollPane.setViewportView(logArea);
 		mySpaceLayer.setLayer(scrollPane, 9999);
 
+		loading = new JLabel("카드를 섞는 중");
+		loading.setFont(new Font("맑은 고딕", Font.BOLD, 15));
+		loading.setHorizontalAlignment(SwingConstants.CENTER);
+		loading.setBounds(115, 63, 266, 40);
+		contentPane.add(loading);
+		loading.setVisible(false);
+
 		btnConn.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				if (btnConn.getText().equals("CONNECT")) {
 					addLog("서버에 연결합니다.");
+					UsernameTxt.setEditable(false);
 					myCards = new ArrayList<>();
 					myCardBtnList = new HashMap<Card, JButton>();
 					try {
 						socket = new Socket(ServerIP.getText(), 5050);
 						addLog("서버와 연결되었습니다.");
-						btnConn.setText("ClOSE");
+						btnConn.setText("CLOSE");
 						addLog("내 소켓번호 : " + socket.getLocalPort());
 						ois = new ObjectInputStream(socket.getInputStream());
 						oos = new ObjectOutputStream(socket.getOutputStream());
@@ -364,6 +376,15 @@ public class PlayerFrame extends JFrame {
 										case 113: // 카드 수 확인, 그리기
 											getUserCardNum();
 											break;
+										case 114:
+											switchShuffle();
+											break;
+										case 115:
+											if (s != null) {
+												s.interrupt();
+												s = null;
+											}
+											break;
 										case 101:// 카드 받기
 											getCards();
 											contentPane.updateUI();
@@ -384,7 +405,7 @@ public class PlayerFrame extends JFrame {
 											resetUsedCard();
 											break;
 										case 107:
-											drawOthers();
+											showNowPlayer();
 											break;
 										case 108:
 											checkPenalty();
@@ -457,7 +478,7 @@ public class PlayerFrame extends JFrame {
 				}
 			}
 			maxUser = userList.size();
-			addLog("└───────────┘ 현재 " + nowUserNum + "/" + maxUser + "명");
+			addLog("└───────────┘ 현재 인원: " + nowUserNum + "명/" + maxUser + "명");
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
 		} catch (IOException e) {
@@ -467,6 +488,7 @@ public class PlayerFrame extends JFrame {
 	}
 
 	private void checkPenalty() {
+		penaltyArea.setVisible(true);
 		try {
 			int penalty = ois.readInt();
 			penaltyNum.setText(penalty + "");
@@ -486,7 +508,7 @@ public class PlayerFrame extends JFrame {
 				addLog("  " + (i + 1) + ". " + userList.get(i));
 			}
 			nowUserNum++; // 현재 접속유저 수
-			addLog("└───────────┘ 현재 " + nowUserNum + "명");
+			addLog("└───────────┘ 현재 인원: " + nowUserNum + "명/" + maxUser + "명");
 			return u;
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
@@ -496,34 +518,71 @@ public class PlayerFrame extends JFrame {
 		return null;
 	}
 
-	private void drawInit(int num) {
-		nextUserCardNum.setText(num + "장");
-		prevUserCardNum.setText(num + "장");
-		for (int i = 0; i < num; i++) {
-			JButton otherCardBtn = new JButton(getImgIcon("/onecard/png/back.png", 88, 52));
-			nextUserLayer.setLayer(otherCardBtn, i);
-			otherCardBtn.setBounds(0, 0 + (7 * i), 88, 52);
-			nextUserLayer.add(otherCardBtn);
-
-			otherCardBtn.setBorderPainted(false);
-			otherCardBtn.setFocusPainted(false);
-			otherCardBtn.setContentAreaFilled(false);
-
-			JButton otherCardBtn2 = new JButton(getImgIcon("/onecard/png/back.png", 88, 52));
-			prevUserLayer.setLayer(otherCardBtn2, i);
-			otherCardBtn2.setBounds(0, 0 + (7 * i), 88, 52);
-			prevUserLayer.add(otherCardBtn2);
-
-			otherCardBtn2.setBorderPainted(false);
-			otherCardBtn2.setFocusPainted(false);
-			otherCardBtn2.setContentAreaFilled(false);
+//	private void drawInit(int num) {
+//		nextUserCardNum.setText(num + "장");
+//		prevUserCardNum.setText(num + "장");
+//		for (int i = 0; i < num; i++) {
+//			JButton otherCardBtn = new JButton(getImgIcon("/onecard/png/back.png", 88, 52));
+//			nextUserLayer.setLayer(otherCardBtn, i);
+//			otherCardBtn.setBounds(0, 0 + (7 * i), 88, 52);
+//			nextUserLayer.add(otherCardBtn);
+//
+//			otherCardBtn.setBorderPainted(false);
+//			otherCardBtn.setFocusPainted(false);
+//			otherCardBtn.setContentAreaFilled(false);
+//
+//			JButton otherCardBtn2 = new JButton(getImgIcon("/onecard/png/back.png", 88, 52));
+//			prevUserLayer.setLayer(otherCardBtn2, i);
+//			otherCardBtn2.setBounds(0, 0 + (7 * i), 88, 52);
+//			prevUserLayer.add(otherCardBtn2);
+//
+//			otherCardBtn2.setBorderPainted(false);
+//			otherCardBtn2.setFocusPainted(false);
+//			otherCardBtn2.setContentAreaFilled(false);
+//		}
+//	}
+	private void showNowPlayer() {
+		int nowUserIdx;
+		try {
+			nowUserIdx = ois.readInt();
+			if (nowUserIdx != myIdx) {
+				loading.setText("[" + userList.get(nowUserIdx).getName() + "]님 카드 선택 중");
+				s = new Spinner();
+				s.start();
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
+	}
+
+	private void switchShuffle() {
+		loading.setText("카드를 섞는 중");
+		loading.setVisible(true);
+
+		String org = loading.getText();
+		for (int i = 0; i < 8; i++) {
+			String tmp = loading.getText();
+			if (i % 4 == 0) {
+				tmp = org;
+			} else {
+				tmp += ".";
+			}
+			loading.setText(tmp);
+			try {
+				Thread.sleep(400);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+
+		}
+		loading.setVisible(false);
 	}
 
 	private void drawHand(User user) {
 		int uIdx = userList.indexOf(user);
 		if (uIdx == nextUserIdx) {
 			nextUserCardNum.setText(user.getCardNum() + "장");
+			nextUserLayer.removeAll();
 			for (int i = 0; i < user.getCardNum(); i++) {
 				JButton otherCardBtn = new JButton(getImgIcon("/onecard/png/back.png", 88, 52));
 				nextUserLayer.setLayer(otherCardBtn, i);
@@ -533,17 +592,21 @@ public class PlayerFrame extends JFrame {
 				otherCardBtn.setBorderPainted(false);
 				otherCardBtn.setFocusPainted(false);
 				otherCardBtn.setContentAreaFilled(false);
+				prevUserLayer.updateUI();
 			}
 		} else if (uIdx == prevUserIdx) {
+			prevUserCardNum.setText(user.getCardNum() + "장");
+			prevUserLayer.removeAll();
 			for (int i = 0; i < user.getCardNum(); i++) {
-				JButton otherCardBtn2 = new JButton(getImgIcon("/onecard/png/back.png", 88, 52));
-				prevUserLayer.setLayer(otherCardBtn2, i);
-				otherCardBtn2.setBounds(0, 0 + (7 * i), 88, 52);
-				prevUserLayer.add(otherCardBtn2);
+				JButton otherCardBtn = new JButton(getImgIcon("/onecard/png/back.png", 88, 52));
+				prevUserLayer.setLayer(otherCardBtn, i);
+				otherCardBtn.setBounds(0, 0 + (7 * i), 88, 52);
+				prevUserLayer.add(otherCardBtn);
 
-				otherCardBtn2.setBorderPainted(false);
-				otherCardBtn2.setFocusPainted(false);
-				otherCardBtn2.setContentAreaFilled(false);
+				otherCardBtn.setBorderPainted(false);
+				otherCardBtn.setFocusPainted(false);
+				otherCardBtn.setContentAreaFilled(false);
+				prevUserLayer.updateUI();
 			}
 		}
 	}
@@ -583,50 +646,6 @@ public class PlayerFrame extends JFrame {
 		}
 	}
 
-	private void drawOthers() {
-		try {
-			int nextUser = 0;
-			int prevUser = maxUser;
-			int otherUserIndex = ois.readInt();
-			int otherCardNum = ois.readInt();
-			if (userIndex + 1 <= maxUser) {
-				nextUser = userIndex + 1;
-			}
-			if (userIndex > 0) {
-				prevUser = userIndex - 1;
-			}
-			if (otherUserIndex == nextUser) {
-				nextUserCardNum.setText(otherCardNum + "장");
-				nextUserLayer.removeAll();
-				for (int i = 0; i < otherCardNum; i++) {
-					JButton otherCardBtn = new JButton(getImgIcon("/onecard/png/back.png", 88, 52));
-					nextUserLayer.setLayer(otherCardBtn, i);
-					otherCardBtn.setBounds(0, 0 + (7 * i), 88, 52);
-					nextUserLayer.add(otherCardBtn);
-
-					otherCardBtn.setBorderPainted(false);
-					otherCardBtn.setFocusPainted(false);
-					otherCardBtn.setContentAreaFilled(false);
-				}
-			} else if (otherUserIndex == prevUser) {
-				prevUserCardNum.setText(otherCardNum + "장");
-				prevUserLayer.removeAll();
-				for (int i = 0; i < otherCardNum; i++) {
-					JButton otherCardBtn = new JButton(getImgIcon("/onecard/png/back.png", 88, 52));
-					prevUserLayer.setLayer(otherCardBtn, i);
-					otherCardBtn.setBounds(0, 0 + (7 * i), 88, 52);
-					prevUserLayer.add(otherCardBtn);
-
-					otherCardBtn.setBorderPainted(false);
-					otherCardBtn.setFocusPainted(false);
-					otherCardBtn.setContentAreaFilled(false);
-				}
-			}
-			contentPane.updateUI();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-	}
 
 	private void resetUsedCard() {
 		topCardCount = 0;
@@ -648,7 +667,7 @@ public class PlayerFrame extends JFrame {
 	private void endGame() {
 		try {
 			String winner = ois.readUTF();
-			JOptionPane.showMessageDialog(contentPane, winner + " 우승!!\n게임 종료.");
+			JOptionPane.showMessageDialog(contentPane, "[" + winner + "]님이 승리하였습니다!!");
 		} catch (IOException e) {
 			e.printStackTrace();
 		} finally {
@@ -856,12 +875,12 @@ public class PlayerFrame extends JFrame {
 							|| c.number == 0) {
 
 						if (!penaltyNum.getText().equals("0")) {
-							if (c.number != 1 && c.number != 2 && c.number != 0) {
+							if (topCard.number == 0) {
+								JOptionPane.showMessageDialog(contentPane, "JOKER를 막을 수 없습니다.\n드십시오.");
+								return;
+							} else if (c.number != 1 && c.number != 2 && c.number != 0) {
 								JOptionPane.showMessageDialog(contentPane,
 										"공격카드(A,2,JOKER)로만 방어가 가능합니다." + "\n없으시면 드셔야합니다.");
-								return;
-							} else if (topCard.number == 0) {
-								JOptionPane.showMessageDialog(contentPane, "조커를 막을 수 없습니다.\n드십시오.");
 								return;
 							}
 						}
@@ -869,6 +888,9 @@ public class PlayerFrame extends JFrame {
 						myCardBtnList.remove(c);
 						resetCardList();
 						if (c.number == 7) {
+							return;
+						}
+						if (c.number == 13) {
 							return;
 						}
 						try {
@@ -922,6 +944,30 @@ public class PlayerFrame extends JFrame {
 		}
 		System.out.println();
 		contentPane.updateUI();
+	}
+
+	class Spinner extends Thread {
+		public void run() {
+			loading.setVisible(true);
+			String org = loading.getText();
+			int i = 0;
+			while (true) {
+				String tmp = loading.getText();
+				if (i % 4 == 0) {
+					tmp = org;
+				} else {
+					tmp += ".";
+				}
+				loading.setText(tmp);
+				i++;
+				try {
+					Thread.sleep(500);
+				} catch (InterruptedException e) {
+					break;
+				}
+			}
+			loading.setVisible(false);
+		}
 	}
 }
 
