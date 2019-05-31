@@ -61,9 +61,10 @@ public class PlayerFrame extends JFrame {
 	private int nextUserIdx;
 	private int prevUserIdx;
 	private Spinner s;
+	private HeartBeat heartBeat;
 
 	private JPanel contentPane;
-	private JTextField ServerIP;
+	private JTextField serverIP;
 	private JLayeredPane myCardLayer;
 	private JPanel openCardPane;
 	private JLayeredPane openCardLayer;
@@ -76,14 +77,19 @@ public class PlayerFrame extends JFrame {
 	private JLabel prevUserCardNum;
 	private JLabel penaltyNum;
 	private SelectShapeWindow newWindow;
-	private JTextField UsernameTxt;
+	private JTextField userNameTxt;
 	private JTextArea logArea;
+	private JPanel mySpace;
 	private JLayeredPane mySpaceLayer;
 	private JButton startBtn;
 	private JButton deckBtn;
 	private JLabel deckLabel;
 	private JPanel penaltyArea;
 	private JLabel loading;
+	private JPanel prevUserSpace;
+	private JPanel nextUserSpace;
+	private JLabel myCardNumLabel;
+	private JLabel myCardNum;
 
 	/**
 	 * Launch the application.
@@ -100,6 +106,40 @@ public class PlayerFrame extends JFrame {
 				}
 			}
 		});
+	}
+
+	private class HeartBeat extends Thread {
+		Socket hSocket = null;
+
+		public void run() {
+			try {
+				hSocket = new Socket(serverIP.getText(), 5051);
+				addLog("HeartBeat 연결 됨");
+				ObjectOutputStream oos = new ObjectOutputStream(hSocket.getOutputStream());
+				ObjectInputStream ois = new ObjectInputStream(hSocket.getInputStream());
+				while (true) {
+					try {
+						oos.write(1);
+						oos.flush();
+						ois.read();
+					} catch (IOException e) {
+						try {
+							oos.write(1);
+							addLog("서버와 연결이 끊어졌습니다.");
+							socket.close();
+							hSocket.close();
+							break;
+						} catch (IOException e1) {
+							e1.printStackTrace();
+						}
+					}
+				}
+			} catch (UnknownHostException e2) {
+				e2.printStackTrace();
+			} catch (IOException e2) {
+
+			}
+		}
 	}
 
 	/**
@@ -125,20 +165,20 @@ public class PlayerFrame extends JFrame {
 		nameLabel.setBounds(11, 10, 80, 23);
 		contentPane.add(nameLabel);
 
-		UsernameTxt = new JTextField();
-		UsernameTxt.setText("Username");
-		UsernameTxt.setColumns(10);
-		UsernameTxt.setBounds(95, 10, 78, 21);
-		contentPane.add(UsernameTxt);
+		userNameTxt = new JTextField();
+		userNameTxt.setText("Username");
+		userNameTxt.setColumns(10);
+		userNameTxt.setBounds(95, 10, 78, 21);
+		contentPane.add(userNameTxt);
 
-		ServerIP = new JTextField();
-		ServerIP.setText("localhost");
-		ServerIP.setBounds(259, 10, 116, 21);
-		contentPane.add(ServerIP);
-		ServerIP.setColumns(10);
+		serverIP = new JTextField();
+		serverIP.setText("localhost");
+		serverIP.setBounds(245, 10, 116, 21);
+		contentPane.add(serverIP);
+		serverIP.setColumns(10);
 
 		JButton btnConn = new JButton("CONNECT");
-		btnConn.setBounds(387, 10, 97, 23);
+		btnConn.setBounds(365, 10, 115, 23);
 		contentPane.add(btnConn);
 
 		getCard = new JButton("<html>카드받기</html>");
@@ -181,7 +221,7 @@ public class PlayerFrame extends JFrame {
 				startBtn.setVisible(false);
 			}
 		});
-		JPanel prevUserSpace = new JPanel();
+		prevUserSpace = new JPanel();
 		prevUserSpace.setBounds(0, 63, 115, 240);
 		contentPane.add(prevUserSpace);
 		prevUserSpace.setLayout(null);
@@ -195,16 +235,11 @@ public class PlayerFrame extends JFrame {
 		prevUserCardNum.setBounds(10, 25, 106, 15);
 		prevUserSpace.add(prevUserCardNum);
 
-		JPanel prevUserPane = new JPanel();
-		prevUserPane.setBounds(-28, 47, 88, 192);
-		prevUserSpace.add(prevUserPane);
-		prevUserPane.setLayout(null);
-
 		prevUserLayer = new JLayeredPane();
-		prevUserLayer.setBounds(0, 0, 88, 192);
-		prevUserPane.add(prevUserLayer);
+		prevUserLayer.setBounds(-38, 48, 88, 192);
+		prevUserSpace.add(prevUserLayer);
 
-		JPanel nextUserSpace = new JPanel();
+		nextUserSpace = new JPanel();
 		nextUserSpace.setBounds(381, 63, 115, 240);
 		contentPane.add(nextUserSpace);
 		nextUserSpace.setLayout(null);
@@ -220,14 +255,9 @@ public class PlayerFrame extends JFrame {
 		nextUserSpace.add(nextUserCardNum);
 		nextUserCardNum.setHorizontalAlignment(SwingConstants.RIGHT);
 
-		JPanel nextUserPane = new JPanel();
-		nextUserPane.setBounds(60, 47, 88, 192);
-		nextUserSpace.add(nextUserPane);
-		nextUserPane.setLayout(null);
-
 		nextUserLayer = new JLayeredPane();
-		nextUserLayer.setBounds(0, 0, 88, 192);
-		nextUserPane.add(nextUserLayer);
+		nextUserLayer.setBounds(65, 48, 88, 192);
+		nextUserSpace.add(nextUserLayer);
 
 		openCardPane = new JPanel();
 		openCardPane.setBounds(115, 126, 176, 125);
@@ -296,7 +326,7 @@ public class PlayerFrame extends JFrame {
 		canvas.setBounds(10, 42, 472, 1);
 		contentPane.add(canvas);
 
-		JPanel mySpace = new JPanel();
+		mySpace = new JPanel();
 		mySpace.setBounds(0, 310, 496, 224);
 		contentPane.add(mySpace);
 		mySpace.setLayout(null);
@@ -326,6 +356,15 @@ public class PlayerFrame extends JFrame {
 		scrollPane.setViewportView(logArea);
 		mySpaceLayer.setLayer(scrollPane, 9999);
 
+		myCardNum = new JLabel("");
+		myCardNum.setBounds(88, 5, 20, 15);
+		mySpace.add(myCardNum);
+
+		myCardNumLabel = new JLabel("내 카드 수 :");
+		myCardNumLabel.setBounds(15, 5, 70, 15);
+		mySpace.add(myCardNumLabel);
+		myCardNumLabel.setVisible(false);
+
 		loading = new JLabel("카드를 섞는 중");
 		loading.setFont(new Font("맑은 고딕", Font.BOLD, 15));
 		loading.setHorizontalAlignment(SwingConstants.CENTER);
@@ -338,25 +377,28 @@ public class PlayerFrame extends JFrame {
 			public void actionPerformed(ActionEvent e) {
 				if (btnConn.getText().equals("CONNECT")) {
 					addLog("서버에 연결합니다.");
-					UsernameTxt.setEditable(false);
+					userNameTxt.setEditable(false);
+					serverIP.setEditable(false);
 					myCards = new ArrayList<>();
 					myCardBtnList = new HashMap<Card, JButton>();
 					try {
-						socket = new Socket(ServerIP.getText(), 5050);
+						socket = new Socket(serverIP.getText(), 5050);
 						addLog("서버와 연결되었습니다.");
-						btnConn.setText("CLOSE");
+						btnConn.setText("DISCONNECT");
+
+						heartBeat = new HeartBeat();
+						heartBeat.start();
+
 						addLog("내 소켓번호 : " + socket.getLocalPort());
 						ois = new ObjectInputStream(socket.getInputStream());
 						oos = new ObjectOutputStream(socket.getOutputStream());
 						newWindow = new SelectShapeWindow(contentPane, oos, myCardBtnList);
-						oos.writeUTF(UsernameTxt.getText());// 이름 전송
+						oos.writeUTF(userNameTxt.getText());// 이름 전송
 						oos.flush();
-						getUserList(); // 접속한 유저 목록 받기
-						setIdx();
-						drawOtherName();
+//						getUserList(); // 접속한 유저 목록 받기
 
 						// 접속한 유저, 빈자리 출력
-						addLog("최대 플레이어 " + maxUser + "명 방입니다.");
+//						addLog("최대 플레이어 " + maxUser + "명 방입니다.");
 
 						Thread receiver = new Thread() {
 							public void run() {
@@ -364,8 +406,12 @@ public class PlayerFrame extends JFrame {
 									game: while (true) {
 										int code = ois.readInt();
 										switch (code) {
-										case 110:// 추가 접속 유저 받기
-											drawOtherName(setNewUser());
+										case 110:// 접속 유저 리스트 받기, 세팅
+											getUserList();
+											setIdx();
+											drawOtherName();
+//											drawOtherName();
+//											drawOtherName(setNewUser());
 											break;
 										case 111:
 											showStartBtn();
@@ -387,6 +433,7 @@ public class PlayerFrame extends JFrame {
 											break;
 										case 101:// 카드 받기
 											getCards();
+											myCardNumLabel.setVisible(true);
 											contentPane.updateUI();
 											break;
 										case 102:// 턴 받기
@@ -425,12 +472,24 @@ public class PlayerFrame extends JFrame {
 						receiver.start();
 
 					} catch (UnknownHostException e1) {
+						userNameTxt.setEditable(true);
+						serverIP.setEditable(true);
 						addLog("서버주소를 찾을 수 없거나 서버가 닫혀있습니다.(UnknownHostException)");
 					} catch (IOException e1) {
+						userNameTxt.setEditable(true);
+						serverIP.setEditable(true);
 						addLog("서버와 스트림 연결을 실패하였습니다.(IOException)");
 					}
 				} else {
-					System.exit(0);
+					heartBeat.interrupt();
+					btnConn.setText("CONNECT");
+					userNameTxt.setEditable(true);
+					serverIP.setEditable(true);
+					try {
+						heartBeat.hSocket.close();
+					} catch (IOException e1) {
+						e1.printStackTrace();
+					}
 				}
 			}
 		});
@@ -468,15 +527,19 @@ public class PlayerFrame extends JFrame {
 	private void getUserList() {
 		try {
 			userList = (List<User>) ois.readObject();
+			addLog("받은 리스트! : "+userList);
 			addLog("┌── 현재 접속자 ──┐");
+			int count = 0;
 			for (int i = 0; i < userList.size(); i++) {
-				addLog("  " + (i + 1) + ". " + userList.get(i));
-				if (userList.get(i).getPort() == socket.getLocalPort()) {
-					myIdx = i;
-					nowUserNum = i + 1; // 현재 접속유저 수
-					break;
+				if (userList.get(i).getPort() != 0) {
+					if (userList.get(i).getPort() == socket.getLocalPort()) {
+						myIdx = i;
+					}
+					addLog("  " + (count + 1) + ". " + userList.get(i).getName());
+					count++;
 				}
 			}
+			nowUserNum = count;
 			maxUser = userList.size();
 			addLog("└───────────┘ 현재 인원: " + nowUserNum + "명/" + maxUser + "명");
 		} catch (ClassNotFoundException e) {
@@ -498,49 +561,26 @@ public class PlayerFrame extends JFrame {
 		}
 	}
 
-	private User setNewUser() {
-		try {
-			User u = (User) ois.readObject();
-			userList.set(nowUserNum, u);
-			addLog("[" + u.getName() + "]님이 접속하셨습니다.");
-			addLog("┌── 현재 접속자 ──┐");
-			for (int i = 0; i <= nowUserNum; i++) {
-				addLog("  " + (i + 1) + ". " + userList.get(i));
-			}
-			nowUserNum++; // 현재 접속유저 수
-			addLog("└───────────┘ 현재 인원: " + nowUserNum + "명/" + maxUser + "명");
-			return u;
-		} catch (ClassNotFoundException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		return null;
-	}
-
-//	private void drawInit(int num) {
-//		nextUserCardNum.setText(num + "장");
-//		prevUserCardNum.setText(num + "장");
-//		for (int i = 0; i < num; i++) {
-//			JButton otherCardBtn = new JButton(getImgIcon("/onecard/png/back.png", 88, 52));
-//			nextUserLayer.setLayer(otherCardBtn, i);
-//			otherCardBtn.setBounds(0, 0 + (7 * i), 88, 52);
-//			nextUserLayer.add(otherCardBtn);
-//
-//			otherCardBtn.setBorderPainted(false);
-//			otherCardBtn.setFocusPainted(false);
-//			otherCardBtn.setContentAreaFilled(false);
-//
-//			JButton otherCardBtn2 = new JButton(getImgIcon("/onecard/png/back.png", 88, 52));
-//			prevUserLayer.setLayer(otherCardBtn2, i);
-//			otherCardBtn2.setBounds(0, 0 + (7 * i), 88, 52);
-//			prevUserLayer.add(otherCardBtn2);
-//
-//			otherCardBtn2.setBorderPainted(false);
-//			otherCardBtn2.setFocusPainted(false);
-//			otherCardBtn2.setContentAreaFilled(false);
+//	private User setNewUser() {
+//		try {
+//			User u = (User) ois.readObject();
+//			userList.set(nowUserNum, u);
+//			addLog("[" + u.getName() + "]님이 접속하셨습니다.");
+//			addLog("┌── 현재 접속자 ──┐");
+//			for (int i = 0; i <= nowUserNum; i++) {
+//				addLog("  " + (i + 1) + ". " + userList.get(i));
+//			}
+//			nowUserNum++; // 현재 접속유저 수
+//			addLog("└───────────┘ 현재 인원: " + nowUserNum + "명/" + maxUser + "명");
+//			return u;
+//		} catch (ClassNotFoundException e) {
+//			e.printStackTrace();
+//		} catch (IOException e) {
+//			e.printStackTrace();
 //		}
+//		return null;
 //	}
+
 	private void showNowPlayer() {
 		int nowUserIdx;
 		try {
@@ -549,6 +589,22 @@ public class PlayerFrame extends JFrame {
 				loading.setText("[" + userList.get(nowUserIdx).getName() + "]님 카드 선택 중");
 				s = new Spinner();
 				s.start();
+			}
+			if (nowUserIdx == nextUserIdx) {
+				mySpace.setBackground(new Color(240, 240, 240));
+				prevUserSpace.setBackground(new Color(240, 240, 240));
+				nextUserSpace.setBackground(new Color(255, 255, 153));
+				contentPane.updateUI();
+			} else if (nowUserIdx == prevUserIdx) {
+				mySpace.setBackground(new Color(240, 240, 240));
+				nextUserSpace.setBackground(new Color(240, 240, 240));
+				prevUserSpace.setBackground(new Color(255, 255, 153));
+				contentPane.updateUI();
+			} else if (nowUserIdx == myIdx) {
+				nextUserSpace.setBackground(new Color(240, 240, 240));
+				prevUserSpace.setBackground(new Color(240, 240, 240));
+				mySpace.setBackground(new Color(255, 255, 153));
+				contentPane.updateUI();
 			}
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -630,8 +686,10 @@ public class PlayerFrame extends JFrame {
 		int uIdx = userList.indexOf(u);
 		if (nextUserIdx == uIdx) {
 			nextUserLabel.setText(userName);
+			nextUserLabel.setForeground(new Color(0, 153, 0));
 		} else if (prevUserIdx == uIdx) {
 			prevUserLabel.setText(userName);
+			prevUserLabel.setForeground(new Color(0, 153, 0));
 		}
 	}
 
@@ -640,12 +698,17 @@ public class PlayerFrame extends JFrame {
 			String userName = userList.get(i).getName();
 			if (nextUserIdx == i) {
 				nextUserLabel.setText(userName);
+				if (userList.get(i).getPort() != 0) {
+					nextUserLabel.setForeground(new Color(0, 153, 0));
+				}
 			} else if (prevUserIdx == i) {
 				prevUserLabel.setText(userName);
+				if (userList.get(i).getPort() != 0) {
+					prevUserLabel.setForeground(new Color(0, 153, 0));
+				}
 			}
 		}
 	}
-
 
 	private void resetUsedCard() {
 		topCardCount = 0;
@@ -748,6 +811,9 @@ public class PlayerFrame extends JFrame {
 			oos.writeObject(c);
 			oos.flush();
 			myCards.remove(c);
+			myCardNum.setText(myCards.size() + "");
+			addLog("내카드 수 출력");
+			mySpace.updateUI();
 			System.out.println(c + "를 제출 했습니다.");
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -764,11 +830,12 @@ public class PlayerFrame extends JFrame {
 				Card c = (Card) ois.readObject();
 				myCards.add(c);
 				System.out.println(c);
-
 				addMyCard(c);
 			}
 			oos.writeInt(myCards.size());
 			oos.flush();
+			myCardNum.setText(myCards.size() + "");
+			mySpace.updateUI();
 		} catch (IOException e) {
 			e.printStackTrace();
 		} catch (ClassNotFoundException e) {
@@ -1075,4 +1142,5 @@ class SelectShapeWindow extends JFrame {
 		setVisible(false);
 		setAlwaysOnTop(true);
 	}
+
 }

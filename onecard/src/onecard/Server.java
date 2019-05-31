@@ -35,9 +35,12 @@ public class Server extends JFrame {
 	private Card topCard = null;
 	private int penaltyNum = 0;
 	private int turnOpt = 1;
+	private HeartBeat heartBeat;
+	private ServerSocket hServerSocket = null;
 
 	private JPanel contentPane;
 	private JTextArea textArea;
+	private User emptyUser = new User(null, 0, "대기중...", null, null);
 
 	/**
 	 * Launch the application.
@@ -58,7 +61,7 @@ public class Server extends JFrame {
 	private List<User> createUserList() {
 		List<User> pl = new ArrayList<>();
 		for (int i = 0; i < PLAYER_NUM; i++) {
-			pl.add(new User(null, 0, "대기중...", null, null));
+			pl.add(emptyUser);
 		}
 		return pl;
 	}
@@ -99,36 +102,44 @@ public class Server extends JFrame {
 			public void actionPerformed(ActionEvent e) {
 				textArea.setText("서버 대기중 ...\n");
 				btnOnOff.setText("OFF");
-				Thread ServerThread = new Thread() {
-					int idx = 0;
 
+				Thread serverThread = new Thread() {
 					public void run() {
 						ServerSocket serverSocket = null;
 						try {
 							serverSocket = new ServerSocket(5050);
-							while (idx < PLAYER_NUM) {
+							hServerSocket = new ServerSocket(5051);// 연결상태 확인하는 신호 소켓
+							int emptyIdx;
+							while ((emptyIdx = emptySpaceIdx()) != -1) {
 								Socket s = serverSocket.accept();
 								ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
 								ObjectInputStream ois = new ObjectInputStream(s.getInputStream());
 								String username = ois.readUTF();// 이름 받음
 								User u = new User(s, s.getPort(), username, oos, ois);
-								playerList.set(idx, u);
+
+								playerList.set(emptyIdx, u);
 								addLog(username + " (" + s.getInetAddress() + ":" + s.getPort() + ") 접속");
-								oos.writeObject(playerList); // playerList전송
+
+								heartBeat = new HeartBeat(hServerSocket, emptyIdx);
+								heartBeat.start();
+
+								oos.writeInt(110);
+								oos.writeObject(playerList); // 추가 접속 userList 전송
 								oos.flush();
-								for (int i = 0; i < idx; i++) {
-									ObjectOutputStream oos2 = (ObjectOutputStream) (playerList.get(i)).getOos();
-									oos2.writeInt(110); // 추가 접속 목록 전송코드
-									oos2.writeObject(u);
-									oos2.flush();
-								}
-								idx++;
-								if (idx > PLAYER_NUM) {
-									idx = PLAYER_NUM;
+								for (User p : playerList) {
+									ObjectOutputStream oos2 = (ObjectOutputStream) p.getOos();
+									if (p.getSocket() != null && oos != oos2) {
+										addLog(p + "에게 유저리스트 전송");
+										addLog("└" + playerList);
+										oos2.writeInt(110);
+										oos2.writeObject(playerList); // 추가 접속 userList 전송
+										oos2.flush();
+									}
 								}
 							}
 
 							// 1번 유저가 스타트 누르면 시작
+
 							ObjectOutputStream oos1 = playerList.get(0).getOos();
 							ObjectInputStream ois1 = playerList.get(0).getOis();
 							oos1.writeInt(111);
@@ -182,7 +193,7 @@ public class Server extends JFrame {
 									}
 									turn += turnOpt;
 									currPlayer = turn % PLAYER_NUM;
-									sendSth(115);//[]님이 카드를 선택중... 스레드 종료명령
+									sendSth(115);// []님이 카드를 선택중... 스레드 종료명령
 
 								} catch (IOException e) {
 									addLog("IOException 발생");
@@ -192,6 +203,7 @@ public class Server extends JFrame {
 							addLog("----------- 게임 종료 -----------");
 							sendSth(105, "String", playerList.get(currPlayer).getName());
 						} catch (IOException e) {
+							heartBeat.interrupt();
 							e.printStackTrace();
 						} finally {
 							try {
@@ -202,7 +214,7 @@ public class Server extends JFrame {
 						}
 					}
 				};
-				ServerThread.start();
+				serverThread.start();
 
 			}
 		});
@@ -210,6 +222,18 @@ public class Server extends JFrame {
 		setAlwaysOnTop(true);
 		setVisible(true);
 
+	}
+
+	public int emptySpaceIdx() {
+		int idx = -1;
+		for (User u : playerList) {
+			if (u.getSocket() == null) {
+				idx = playerList.indexOf(u);
+				addLog("idx : " + idx);
+				break;
+			}
+		}
+		return idx;
 	}
 
 	private boolean hasCard(User u) {
@@ -287,32 +311,6 @@ public class Server extends JFrame {
 	private void sendPenalty() {
 		sendSth(108, "int", penaltyNum);
 	}
-
-//	private void getUserRemain(User user) {
-//		try {
-//			int code = 107;
-//			int cardNum = user.getOis().readInt();
-//			if (cardNum == 0) {
-//				addLog("[" + user.getName() + "]가 승리하였습니다 !!");
-//				win = true;
-//			} else {
-//				addLog("[" + user.getName() + "]의 남은 카드 수 : " + cardNum);
-//				for (User other : playerList) {
-//					ObjectOutputStream oos = (ObjectOutputStream) other.getOos();
-//					if (other.equals(user)) {
-//						continue;
-//					} else {
-//						oos.writeInt(code);
-//						oos.writeInt(playerList.indexOf(user));
-//						oos.writeInt(cardNum);
-//						oos.flush();
-//					}
-//				}
-//			}
-//		} catch (IOException e) {
-//			e.printStackTrace();
-//		}
-//	}
 
 	private void giveTurn(User user) {
 		int code = 102;
@@ -520,5 +518,44 @@ public class Server extends JFrame {
 
 	private void announce(String text) {
 		sendSth(103, "String", "[알림]" + text);
+	}
+
+	private class HeartBeat extends Thread {
+		int uIdx;
+		ServerSocket socket;
+		Socket hSocket = null;
+
+		public HeartBeat(ServerSocket socket, int uIdx) {
+			this.socket = socket;
+			this.uIdx = uIdx;
+		}
+
+		public void run() {
+			try {
+				hSocket = socket.accept();
+				addLog("HeartBeat 연결 됨");
+				ObjectOutputStream oos = new ObjectOutputStream(hSocket.getOutputStream());
+				ObjectInputStream ois = new ObjectInputStream(hSocket.getInputStream());
+
+				while (true) {
+					try {
+						oos.write(1);
+						oos.flush();
+						ois.read();
+					} catch (IOException e) {
+						addLog("[" + playerList.get(uIdx).getName() + "]님 연결 종료");
+						hSocket.close();
+						playerList.get(uIdx).getSocket().close();
+						playerList.set(uIdx, emptyUser);
+						break;
+					}
+				}
+
+			} catch (IOException e1) {
+				e1.printStackTrace();
+			}
+
+		}
+
 	}
 }
