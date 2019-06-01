@@ -62,6 +62,7 @@ public class PlayerFrame extends JFrame {
 	private int prevUserIdx;
 	private Spinner s;
 	private HeartBeat heartBeat;
+	private Thread countThread;
 
 	private JPanel contentPane;
 	private JTextField serverIP;
@@ -150,6 +151,7 @@ public class PlayerFrame extends JFrame {
 
 		setTitle("PLAYER");
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		setResizable(false);
 		setSize(512, 573);
 		contentPane = new JPanel();
 		contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
@@ -191,6 +193,7 @@ public class PlayerFrame extends JFrame {
 			public void actionPerformed(ActionEvent e) {
 				if (hasTurn) {
 					try {
+						countThread.interrupt();
 						oos.writeInt(202);
 						oos.flush();
 						hasTurn = false;
@@ -277,7 +280,7 @@ public class PlayerFrame extends JFrame {
 		contentPane.add(deckLabel);
 		deckLabel.setVisible(false);
 
-		deckBtn = new JButton(getImgIcon("/onecard/png/back_org.png", 74, 125));
+		deckBtn = new JButton(getImgIcon("/onecard/img/back_org.png", 74, 125));
 		deckBtn.setBounds(307, 126, 74, 125);
 		contentPane.add(deckBtn);
 		deckBtn.addMouseListener(new MouseListener() {
@@ -643,7 +646,7 @@ public class PlayerFrame extends JFrame {
 			nextUserCardNum.setText(user.getCardNum() + "장");
 			nextUserLayer.removeAll();
 			for (int i = 0; i < user.getCardNum(); i++) {
-				JButton otherCardBtn = new JButton(getImgIcon("/onecard/png/back.png", 88, 52));
+				JButton otherCardBtn = new JButton(getImgIcon("/onecard/img/back.png", 88, 52));
 				nextUserLayer.setLayer(otherCardBtn, i);
 				otherCardBtn.setBounds(0, 0 + (7 * i), 88, 52);
 				nextUserLayer.add(otherCardBtn);
@@ -657,7 +660,7 @@ public class PlayerFrame extends JFrame {
 			prevUserCardNum.setText(user.getCardNum() + "장");
 			prevUserLayer.removeAll();
 			for (int i = 0; i < user.getCardNum(); i++) {
-				JButton otherCardBtn = new JButton(getImgIcon("/onecard/png/back.png", 88, 52));
+				JButton otherCardBtn = new JButton(getImgIcon("/onecard/img/back.png", 88, 52));
 				prevUserLayer.setLayer(otherCardBtn, i);
 				otherCardBtn.setBounds(0, 0 + (7 * i), 88, 52);
 				prevUserLayer.add(otherCardBtn);
@@ -684,17 +687,17 @@ public class PlayerFrame extends JFrame {
 		}
 	}
 
-	private void drawOtherName(User u) {
-		String userName = u.getName();
-		int uIdx = userList.indexOf(u);
-		if (nextUserIdx == uIdx) {
-			nextUserLabel.setText(userName);
-			nextUserLabel.setForeground(new Color(0, 153, 0));
-		} else if (prevUserIdx == uIdx) {
-			prevUserLabel.setText(userName);
-			prevUserLabel.setForeground(new Color(0, 153, 0));
-		}
-	}
+//	private void drawOtherName(User u) {
+//		String userName = u.getName();
+//		int uIdx = userList.indexOf(u);
+//		if (nextUserIdx == uIdx) {
+//			nextUserLabel.setText(userName);
+//			nextUserLabel.setForeground(new Color(0, 153, 0));
+//		} else if (prevUserIdx == uIdx) {
+//			prevUserLabel.setText(userName);
+//			prevUserLabel.setForeground(new Color(0, 153, 0));
+//		}
+//	}
 
 	private void drawOtherName() {
 		for (int i = 0; i < userList.size(); i++) {
@@ -775,11 +778,51 @@ public class PlayerFrame extends JFrame {
 		}
 	}
 
+	private void sendTimeOut() {
+		try {
+			oos.writeInt(203);
+			oos.flush();
+			JOptionPane.showMessageDialog(contentPane, "시간초과!\n카드를 받고 차례를 넘깁니다.");
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	private void startCountDown() {
+		countThread = new Thread() {
+			public void run() {
+
+				JLabel hourGlass = new JLabel();
+				hourGlass.setIcon(new ImageIcon("/onecard/img/hourglass.gif"));
+				contentPane.add(hourGlass);
+				hourGlass.setVisible(true);
+
+				loading.setVisible(false);
+				for (int i = 10; i > 0; i--) {
+					loading.setText(i + "초");
+					loading.setVisible(true);
+					try {
+						countThread.sleep(1000);
+						if (i == 1) {
+							loading.setVisible(false);
+							sendTimeOut();
+						}
+					} catch (InterruptedException e) {
+						addLog("시간내에 카드 제출함");
+						break;
+					}
+				}
+			}
+		};
+		countThread.start();
+	}
+
 	private void getTurn() {
 		try {
 			hasTurn = true;
 			String text = ois.readUTF();
 			addLog("[알림]" + text); // 당신의 차례입니다.
+			startCountDown();
 			JOptionPane.showMessageDialog(contentPane, "당신의 차례입니다.");
 			List<Card> recCards = getRecommend();
 
@@ -817,7 +860,6 @@ public class PlayerFrame extends JFrame {
 			myCardNum.setText(myCards.size() + "");
 			addLog("내카드 수 출력");
 			mySpace.updateUI();
-			System.out.println(c + "를 제출 했습니다.");
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -828,11 +870,9 @@ public class PlayerFrame extends JFrame {
 		int amountCards = 0;
 		try {
 			amountCards = ois.readInt();
-			System.out.println("받은 카드 " + amountCards + "장 :");
 			for (int i = 0; i < amountCards; i++) {
 				Card c = (Card) ois.readObject();
 				myCards.add(c);
-				System.out.println(c);
 				addMyCard(c);
 			}
 			oos.writeInt(myCards.size());
@@ -844,7 +884,6 @@ public class PlayerFrame extends JFrame {
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
 		}
-		System.out.println("보유 카드 : " + myCards);
 	}
 
 	public String getFileName(Card c) {
@@ -893,7 +932,7 @@ public class PlayerFrame extends JFrame {
 	}
 
 	public ImageIcon getImgIcon(Card c, int width, int height) {
-		URL searchURL = getClass().getResource("/onecard/png/" + getFileName(c));
+		URL searchURL = getClass().getResource("/onecard/img/" + getFileName(c));
 		ImageIcon imgIcon = new ImageIcon(searchURL);
 		Image originImg = imgIcon.getImage();
 		Image changedImg = originImg.getScaledInstance(width, height, Image.SCALE_SMOOTH);// 이미지 변경 세팅
@@ -955,6 +994,7 @@ public class PlayerFrame extends JFrame {
 							}
 						}
 						giveCard(c);
+						countThread.interrupt();
 						myCardBtnList.remove(c);
 						resetCardList();
 						if (c.number == 7) {
@@ -1067,7 +1107,7 @@ class SelectShapeWindow extends JFrame {
 		label.setBounds(12, 10, 260, 15);
 		contentPane.add(label);
 
-		JButton spade = new JButton(getImgIcon("/onecard/png/S.png", 56, 84));
+		JButton spade = new JButton(getImgIcon("/onecard/img/S.png", 56, 84));
 		spade.setBounds(12, 50, 56, 84);
 		contentPane.add(spade);
 		spade.addActionListener(new ActionListener() {
@@ -1086,7 +1126,7 @@ class SelectShapeWindow extends JFrame {
 			}
 		});
 
-		JButton diamond = new JButton(getImgIcon("/onecard/png/D.png", 56, 84));
+		JButton diamond = new JButton(getImgIcon("/onecard/img/D.png", 56, 84));
 		diamond.setBounds(80, 50, 56, 84);
 		contentPane.add(diamond);
 		diamond.addActionListener(new ActionListener() {
@@ -1105,7 +1145,7 @@ class SelectShapeWindow extends JFrame {
 			}
 		});
 
-		JButton heart = new JButton(getImgIcon("/onecard/png/H.png", 56, 84));
+		JButton heart = new JButton(getImgIcon("/onecard/img/H.png", 56, 84));
 		heart.setBounds(148, 50, 56, 84);
 		contentPane.add(heart);
 		heart.addActionListener(new ActionListener() {
@@ -1124,7 +1164,7 @@ class SelectShapeWindow extends JFrame {
 			}
 		});
 
-		JButton clover = new JButton(getImgIcon("/onecard/png/C.png", 56, 84));
+		JButton clover = new JButton(getImgIcon("/onecard/img/C.png", 56, 84));
 		clover.setBounds(216, 50, 56, 84);
 		contentPane.add(clover);
 		clover.addActionListener(new ActionListener() {

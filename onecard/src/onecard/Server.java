@@ -18,6 +18,8 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JButton;
+import javax.swing.JLabel;
+import javax.swing.JTextField;
 
 public class Server extends JFrame {
 	/**
@@ -43,6 +45,7 @@ public class Server extends JFrame {
 	private JPanel contentPane;
 	private JTextArea textArea;
 	private User emptyUser = new User(null, 0, "대기중...", null, null);
+	private JTextField playerNumTxt;
 
 	/**
 	 * Launch the application.
@@ -78,6 +81,7 @@ public class Server extends JFrame {
 
 		setTitle("SERVER");
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		setResizable(false);
 		setBounds(100, 100, 420, 460);
 		contentPane = new JPanel();
 		contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
@@ -85,12 +89,12 @@ public class Server extends JFrame {
 		contentPane.setLayout(null);
 
 		JPanel panel = new JPanel();
-		panel.setBounds(12, 10, 269, 401);
+		panel.setBounds(12, 52, 269, 359);
 		contentPane.add(panel);
 		panel.setLayout(null);
 
 		JScrollPane scrollPane = new JScrollPane();
-		scrollPane.setBounds(0, 0, 281, 421);
+		scrollPane.setBounds(0, 0, 269, 359);
 		panel.add(scrollPane);
 
 		textArea = new JTextArea();
@@ -99,131 +103,22 @@ public class Server extends JFrame {
 		JButton btnOnOff = new JButton("ON");
 		btnOnOff.setBounds(295, 10, 97, 35);
 		contentPane.add(btnOnOff);
+
+		JLabel playerNumLabel = new JLabel("플레이어 수 :");
+		playerNumLabel.setBounds(12, 20, 81, 15);
+		contentPane.add(playerNumLabel);
+
+		playerNumTxt = new JTextField();
+		playerNumTxt.setText("3");
+		playerNumTxt.setBounds(90, 17, 20, 21);
+		contentPane.add(playerNumTxt);
+		playerNumTxt.setColumns(10);
 		btnOnOff.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				textArea.setText("서버 대기중 ...\n");
 				btnOnOff.setText("OFF");
-
-				Thread serverThread = new Thread() {
-
-					ObjectOutputStream oos2;
-
-					public void run() {
-						try {
-							serverSocket = new ServerSocket(5050);
-							hServerSocket = new ServerSocket(5051);// 연결상태 확인하는 신호 소켓
-							int emptyIdx;
-							while ((emptyIdx = emptySpaceIdx()) != -1) {
-								Socket s = serverSocket.accept();
-								emptyIdx = emptySpaceIdx();
-								ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
-								ObjectInputStream ois = new ObjectInputStream(s.getInputStream());
-								String username = ois.readUTF();// 이름 받음
-								User u = new User(s, s.getPort(), username, oos, ois);
-
-								playerList.set(emptyIdx, u);
-								addLog(username + " (" + s.getInetAddress() + ":" + s.getPort() + ") 접속");
-
-								heartBeat = new HeartBeat(hServerSocket, emptyIdx);
-								heartBeat.start();
-
-								for (User p : playerList) {
-									oos2 = (ObjectOutputStream) p.getOos();
-									if (p.getPort() != 0) {
-										oos2.writeInt(110);
-										oos2.writeObject(playerList); // 추가 접속 userList 전송
-										oos2.flush();
-										oos2.reset(); // ! 중요 스트림 초기화를 하지않으면 같은 객체를 보낼시 이전 객체를 보냄(캐싱) !
-									}
-								}
-								if (emptySpaceIdx() == -1) { // 풀방이면,
-									// 가장 먼저 들어온 유저가 스타트 누르면 시작									
-									for (int i = 0; i < playerList.size() - 1; i++) {
-										roomMaster = playerList.get(i);
-										for (int j = i + 1; j < playerList.size(); j++) {
-											if (roomMaster.getConnectTime() > playerList.get(j).getConnectTime()) {
-												roomMaster = playerList.get(j);
-											}
-										}
-									}
-									ObjectOutputStream oos1 = roomMaster.getOos();
-									ObjectInputStream ois1 = roomMaster.getOis();
-									oos1.writeInt(111);
-									oos1.flush();
-									addLog("풀방입니다.\n게임 시작 응답 대기 중 ...");
-									announce("방장이 게임시작을 누르면 시작합니다.");
-
-									while (true) {
-										try {
-											int startCode = ois1.readInt();
-											if (startCode == 1) {
-												addLog("게임을 시작합니다.");
-												announce("게임을 시작합니다.");
-												break;
-											}
-										} catch (Exception e) {
-											continue;
-										}
-									}
-								}
-							}
-
-							newDeck(); // 새덱 생성
-							shuffle(); // 덱 셔플
-							for (User u : playerList) {
-								giveCard(INIT_CARD_NUM, u); // 시작카드 분배
-							}
-							setTopCard();
-							sendTopCard();
-							sendPenalty();
-							while (true) {
-								if (turn < PLAYER_NUM) {
-									turn += PLAYER_NUM;
-								}
-								User user = playerList.get(currPlayer);
-								sendSth(107, "int", currPlayer);// []님이 카드를 선택중... 신호보내기
-								ObjectInputStream ois = user.getOis();
-								giveTurn(user);
-								try {
-									turn: while (true) {
-										int answer = ois.readInt();
-										switch (answer) {
-										case 201: // 플레이어로부터 카드 1장 받기
-											getCard(ois);
-											sendPenalty();
-											break turn;
-										case 202: // 플레이어에게 카드 주기
-											giveCard(penaltyNum, user);
-											break turn;
-										}
-									}
-									if (!hasCard(user)) {
-										break;
-									}
-									turn += turnOpt;
-									currPlayer = turn % PLAYER_NUM;
-									sendSth(115);// []님이 카드를 선택중... 스레드 종료명령
-
-								} catch (IOException e) {
-									addLog("IOException 발생");
-									e.printStackTrace();
-								}
-							}
-							addLog("----------- 게임 종료 -----------");
-							sendSth(105, "String", playerList.get(currPlayer).getName());
-						} catch (IOException e) {
-							heartBeat.interrupt();
-							e.printStackTrace();
-						} finally {
-							try {
-								serverSocket.close();
-							} catch (IOException e) {
-								e.printStackTrace();
-							}
-						}
-					}
-				};
+				Thread serverThread = new ServerThread();
 				serverThread.start();
 
 			}
@@ -320,6 +215,128 @@ public class Server extends JFrame {
 
 	private void sendPenalty() {
 		sendSth(108, "int", penaltyNum);
+	}
+
+	class ServerThread extends Thread {
+
+		ObjectOutputStream oos2;
+
+		public void run() {
+			try {
+				serverSocket = new ServerSocket(5050);
+				hServerSocket = new ServerSocket(5051);// 연결상태 확인하는 신호 소켓
+				int emptyIdx;
+				while ((emptyIdx = emptySpaceIdx()) != -1) {
+					Socket s = serverSocket.accept();
+					emptyIdx = emptySpaceIdx();
+					ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
+					ObjectInputStream ois = new ObjectInputStream(s.getInputStream());
+					String username = ois.readUTF();// 이름 받음
+					User u = new User(s, s.getPort(), username, oos, ois);
+
+					playerList.set(emptyIdx, u);
+					addLog(username + " (" + s.getInetAddress() + ":" + s.getPort() + ") 접속");
+
+					heartBeat = new HeartBeat(hServerSocket, emptyIdx);
+					heartBeat.start();
+
+					for (User p : playerList) {
+						oos2 = (ObjectOutputStream) p.getOos();
+						if (p.getPort() != 0) {
+							oos2.writeInt(110);
+							oos2.writeObject(playerList); // 추가 접속 userList 전송
+							oos2.flush();
+							oos2.reset(); // ! 중요 스트림 초기화를 하지않으면 같은 객체를 보낼시 이전 객체를 보냄(캐싱) !
+						}
+					}
+					if (emptySpaceIdx() == -1) { // 풀방이면,
+						// 가장 먼저 들어온 유저가 스타트 누르면 시작
+						roomMaster = playerList.get(0);
+						for (int i = 1; i < playerList.size() - 1; i++) {
+							if (roomMaster.getConnectTime() > playerList.get(i).getConnectTime()) {
+								roomMaster = playerList.get(i);
+							}
+						}
+						ObjectOutputStream oos1 = roomMaster.getOos();
+						ObjectInputStream ois1 = roomMaster.getOis();
+						oos1.writeInt(111);
+						oos1.flush();
+						addLog("풀방입니다.\n게임 시작 응답 대기 중 ...");
+						announce("방장이 게임시작을 누르면 시작합니다.");
+
+						while (true) {
+							try {
+								int startCode = ois1.readInt();
+								if (startCode == 1) {
+									addLog("게임을 시작합니다.");
+									announce("게임을 시작합니다.");
+									break;
+								}
+							} catch (Exception e) {
+								continue;
+							}
+						}
+					}
+				}
+
+				newDeck(); // 새덱 생성
+				shuffle(); // 덱 셔플
+				for (User u : playerList) {
+					giveCard(INIT_CARD_NUM, u); // 시작카드 분배
+				}
+				setTopCard();
+				sendTopCard();
+				sendPenalty();
+				while (true) {
+					if (turn < PLAYER_NUM) {
+						turn += PLAYER_NUM;
+					}
+					User user = playerList.get(currPlayer);
+					sendSth(107, "int", currPlayer);// []님이 카드를 선택중... 신호보내기
+					ObjectInputStream ois = user.getOis();
+					giveTurn(user);
+					try {
+						turn: while (true) {
+							int answer = ois.readInt();
+							switch (answer) {
+							case 201: // 플레이어로부터 카드 1장 받기
+								getCard(ois);
+								sendPenalty();
+								break turn;
+							case 202: // 플레이어에게 카드 주기
+								giveCard(penaltyNum, user);
+								break turn;
+							case 203: // 제한 시간 종료
+								giveCard(penaltyNum, user);
+								announce("[" + currPlayer + "]님이 시간초과로 차례를 넘깁니다.");
+								break turn;
+							}
+						}
+						if (!hasCard(user)) {
+							break;
+						}
+						turn += turnOpt;
+						currPlayer = turn % PLAYER_NUM;
+						sendSth(115);// []님이 카드를 선택중... 스레드 종료명령
+
+					} catch (IOException e) {
+						addLog("IOException 발생");
+						e.printStackTrace();
+					}
+				}
+				addLog("----------- 게임 종료 -----------");
+				sendSth(105, "String", playerList.get(currPlayer).getName());
+			} catch (IOException e) {
+				heartBeat.interrupt();
+				e.printStackTrace();
+			} finally {
+				try {
+					serverSocket.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		}
 	}
 
 	private void giveTurn(User user) {
