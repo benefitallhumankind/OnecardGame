@@ -4,6 +4,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.net.Socket;
+import java.util.Date;
 
 public class User implements Serializable {
 	/**
@@ -16,6 +17,15 @@ public class User implements Serializable {
 	private int port;
 	private int cardNum;
 	private String name;
+	private long connectTime;
+
+	public long getConnectTime() {
+		return connectTime;
+	}
+
+	public void setConnectTime(long connectTime) {
+		this.connectTime = connectTime;
+	}
 
 	public Socket getSocket() {
 		return socket;
@@ -71,6 +81,7 @@ public class User implements Serializable {
 		this.name = name;
 		this.oos = oos;
 		this.ois = ois;
+		this.connectTime = new Date().getTime();
 	}
 
 	@Override

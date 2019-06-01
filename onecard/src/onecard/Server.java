@@ -37,6 +37,8 @@ public class Server extends JFrame {
 	private int turnOpt = 1;
 	private HeartBeat heartBeat;
 	private ServerSocket hServerSocket = null;
+	private ServerSocket serverSocket = null;
+	private User roomMaster = null;
 
 	private JPanel contentPane;
 	private JTextArea textArea;
@@ -104,14 +106,17 @@ public class Server extends JFrame {
 				btnOnOff.setText("OFF");
 
 				Thread serverThread = new Thread() {
+
+					ObjectOutputStream oos2;
+
 					public void run() {
-						ServerSocket serverSocket = null;
 						try {
 							serverSocket = new ServerSocket(5050);
 							hServerSocket = new ServerSocket(5051);// 연결상태 확인하는 신호 소켓
 							int emptyIdx;
 							while ((emptyIdx = emptySpaceIdx()) != -1) {
 								Socket s = serverSocket.accept();
+								emptyIdx = emptySpaceIdx();
 								ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
 								ObjectInputStream ois = new ObjectInputStream(s.getInputStream());
 								String username = ois.readUTF();// 이름 받음
@@ -123,42 +128,47 @@ public class Server extends JFrame {
 								heartBeat = new HeartBeat(hServerSocket, emptyIdx);
 								heartBeat.start();
 
-								oos.writeInt(110);
-								oos.writeObject(playerList); // 추가 접속 userList 전송
-								oos.flush();
 								for (User p : playerList) {
-									ObjectOutputStream oos2 = (ObjectOutputStream) p.getOos();
-									if (p.getSocket() != null && oos != oos2) {
-										addLog(p + "에게 유저리스트 전송");
-										addLog("└" + playerList);
+									oos2 = (ObjectOutputStream) p.getOos();
+									if (p.getPort() != 0) {
 										oos2.writeInt(110);
 										oos2.writeObject(playerList); // 추가 접속 userList 전송
 										oos2.flush();
+										oos2.reset(); // ! 중요 스트림 초기화를 하지않으면 같은 객체를 보낼시 이전 객체를 보냄(캐싱) !
+									}
+								}
+								if (emptySpaceIdx() == -1) { // 풀방이면,
+									// 가장 먼저 들어온 유저가 스타트 누르면 시작									
+									for (int i = 0; i < playerList.size() - 1; i++) {
+										roomMaster = playerList.get(i);
+										for (int j = i + 1; j < playerList.size(); j++) {
+											if (roomMaster.getConnectTime() > playerList.get(j).getConnectTime()) {
+												roomMaster = playerList.get(j);
+											}
+										}
+									}
+									ObjectOutputStream oos1 = roomMaster.getOos();
+									ObjectInputStream ois1 = roomMaster.getOis();
+									oos1.writeInt(111);
+									oos1.flush();
+									addLog("풀방입니다.\n게임 시작 응답 대기 중 ...");
+									announce("방장이 게임시작을 누르면 시작합니다.");
+
+									while (true) {
+										try {
+											int startCode = ois1.readInt();
+											if (startCode == 1) {
+												addLog("게임을 시작합니다.");
+												announce("게임을 시작합니다.");
+												break;
+											}
+										} catch (Exception e) {
+											continue;
+										}
 									}
 								}
 							}
 
-							// 1번 유저가 스타트 누르면 시작
-
-							ObjectOutputStream oos1 = playerList.get(0).getOos();
-							ObjectInputStream ois1 = playerList.get(0).getOis();
-							oos1.writeInt(111);
-							oos1.flush();
-							addLog("풀방입니다.\n게임 시작 응답 대기 중 ...");
-							announce("방장이 게임시작을 누르면 시작합니다.");
-
-							while (true) {
-								try {
-									int startCode = ois1.readInt();
-									if (startCode == 1) {
-										addLog("게임을 시작합니다.");
-										announce("게임을 시작합니다.");
-										break;
-									}
-								} catch (Exception e) {
-									continue;
-								}
-							}
 							newDeck(); // 새덱 생성
 							shuffle(); // 덱 셔플
 							for (User u : playerList) {
@@ -548,6 +558,11 @@ public class Server extends JFrame {
 						playerList.get(uIdx).getSocket().close();
 						playerList.set(uIdx, emptyUser);
 						break;
+					}
+					try {
+						Thread.sleep(10);
+					} catch (InterruptedException e) {
+						e.printStackTrace();
 					}
 				}
 

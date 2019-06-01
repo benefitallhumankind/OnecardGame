@@ -482,6 +482,7 @@ public class PlayerFrame extends JFrame {
 					}
 				} else {
 					heartBeat.interrupt();
+					startBtn.setVisible(false);
 					btnConn.setText("CONNECT");
 					userNameTxt.setEditable(true);
 					serverIP.setEditable(true);
@@ -527,7 +528,8 @@ public class PlayerFrame extends JFrame {
 	private void getUserList() {
 		try {
 			userList = (List<User>) ois.readObject();
-			addLog("받은 리스트! : "+userList);
+
+			addLog("받은 리스트! : " + userList);
 			addLog("┌── 현재 접속자 ──┐");
 			int count = 0;
 			for (int i = 0; i < userList.size(); i++) {
@@ -542,6 +544,7 @@ public class PlayerFrame extends JFrame {
 			nowUserNum = count;
 			maxUser = userList.size();
 			addLog("└───────────┘ 현재 인원: " + nowUserNum + "명/" + maxUser + "명");
+
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
 		} catch (IOException e) {
