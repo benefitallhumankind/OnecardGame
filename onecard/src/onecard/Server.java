@@ -134,7 +134,6 @@ public class Server extends JFrame {
 		for (User u : playerList) {
 			if (u.getSocket() == null) {
 				idx = playerList.indexOf(u);
-				addLog("idx : " + idx);
 				break;
 			}
 		}
@@ -249,32 +248,34 @@ public class Server extends JFrame {
 							oos2.reset(); // ! 중요 스트림 초기화를 하지않으면 같은 객체를 보낼시 이전 객체를 보냄(캐싱) !
 						}
 					}
-					if (emptySpaceIdx() == -1) { // 풀방이면,
-						// 가장 먼저 들어온 유저가 스타트 누르면 시작
-						roomMaster = playerList.get(0);
-						for (int i = 1; i < playerList.size() - 1; i++) {
-							if (roomMaster.getConnectTime() > playerList.get(i).getConnectTime()) {
-								roomMaster = playerList.get(i);
-							}
+				}
+				if (emptySpaceIdx() == -1) { // 풀방이면,
+					// 가장 먼저 들어온 유저가 스타트 누르면 시작
+					roomMaster = playerList.get(0);
+					for (int i = 1; i < playerList.size() - 1; i++) {
+						if (roomMaster.getConnectTime() > playerList.get(i).getConnectTime()) {
+							roomMaster = playerList.get(i);
 						}
-						ObjectOutputStream oos1 = roomMaster.getOos();
-						ObjectInputStream ois1 = roomMaster.getOis();
-						oos1.writeInt(111);
-						oos1.flush();
-						addLog("풀방입니다.\n게임 시작 응답 대기 중 ...");
-						announce("방장이 게임시작을 누르면 시작합니다.");
-
-						while (true) {
-							try {
-								int startCode = ois1.readInt();
-								if (startCode == 1) {
-									addLog("게임을 시작합니다.");
-									announce("게임을 시작합니다.");
-									break;
-								}
-							} catch (Exception e) {
-								continue;
+					}
+					ObjectOutputStream oos1 = roomMaster.getOos();
+					ObjectInputStream ois1 = roomMaster.getOis();
+					oos1.writeInt(111);
+					oos1.flush();
+					addLog("풀방입니다.\n게임 시작 응답 대기 중 ...");
+					announce("방장이 게임시작을 누르면 시작합니다.");
+					
+					while (true) {
+						try {
+							int startCode = ois1.readInt();
+							if (startCode == 1) {
+								addLog("게임을 시작합니다.");
+								announce("게임을 시작합니다.");
+								break;
+							} else {
+								//다시 유저 받기
 							}
+						} catch (Exception e) {
+							continue;
 						}
 					}
 				}

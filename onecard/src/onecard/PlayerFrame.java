@@ -91,6 +91,7 @@ public class PlayerFrame extends JFrame {
 	private JPanel nextUserSpace;
 	private JLabel myCardNumLabel;
 	private JLabel myCardNum;
+	private JLabel hourGlass;
 
 	/**
 	 * Launch the application.
@@ -148,7 +149,6 @@ public class PlayerFrame extends JFrame {
 	 */
 
 	public PlayerFrame() {
-
 		setTitle("PLAYER");
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		setResizable(false);
@@ -398,10 +398,6 @@ public class PlayerFrame extends JFrame {
 						newWindow = new SelectShapeWindow(contentPane, oos, myCardBtnList);
 						oos.writeUTF(userNameTxt.getText());// 이름 전송
 						oos.flush();
-//						getUserList(); // 접속한 유저 목록 받기
-
-						// 접속한 유저, 빈자리 출력
-//						addLog("최대 플레이어 " + maxUser + "명 방입니다.");
 
 						Thread receiver = new Thread() {
 							public void run() {
@@ -413,8 +409,6 @@ public class PlayerFrame extends JFrame {
 											getUserList();
 											setIdx();
 											drawOtherName();
-//											drawOtherName();
-//											drawOtherName(setNewUser());
 											break;
 										case 111:
 											showStartBtn();
@@ -566,26 +560,6 @@ public class PlayerFrame extends JFrame {
 			e.printStackTrace();
 		}
 	}
-
-//	private User setNewUser() {
-//		try {
-//			User u = (User) ois.readObject();
-//			userList.set(nowUserNum, u);
-//			addLog("[" + u.getName() + "]님이 접속하셨습니다.");
-//			addLog("┌── 현재 접속자 ──┐");
-//			for (int i = 0; i <= nowUserNum; i++) {
-//				addLog("  " + (i + 1) + ". " + userList.get(i));
-//			}
-//			nowUserNum++; // 현재 접속유저 수
-//			addLog("└───────────┘ 현재 인원: " + nowUserNum + "명/" + maxUser + "명");
-//			return u;
-//		} catch (ClassNotFoundException e) {
-//			e.printStackTrace();
-//		} catch (IOException e) {
-//			e.printStackTrace();
-//		}
-//		return null;
-//	}
 
 	private void showNowPlayer() {
 		int nowUserIdx;
@@ -782,6 +756,7 @@ public class PlayerFrame extends JFrame {
 		try {
 			oos.writeInt(203);
 			oos.flush();
+			contentPane.remove(hourGlass);
 			JOptionPane.showMessageDialog(contentPane, "시간초과!\n카드를 받고 차례를 넘깁니다.");
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -792,14 +767,19 @@ public class PlayerFrame extends JFrame {
 		countThread = new Thread() {
 			public void run() {
 
-				JLabel hourGlass = new JLabel();
-				hourGlass.setIcon(new ImageIcon("/onecard/img/hourglass.gif"));
+				URL url = this.getClass().getResource("/onecard/img/timelimit.gif");
+				ImageIcon myImgIcon = new ImageIcon(url);
+				Image originImg = myImgIcon.getImage();
+				Image changedImg = originImg.getScaledInstance(40, 40, Image.SCALE_DEFAULT);
+
+				hourGlass = new JLabel(new ImageIcon(changedImg));
+				hourGlass.setBounds(155, 63, 40, 40);
 				contentPane.add(hourGlass);
 				hourGlass.setVisible(true);
 
 				loading.setVisible(false);
 				for (int i = 10; i > 0; i--) {
-					loading.setText(i + "초");
+					loading.setText("남은 시간 : " + i + "초");
 					loading.setVisible(true);
 					try {
 						countThread.sleep(1000);
@@ -809,6 +789,7 @@ public class PlayerFrame extends JFrame {
 						}
 					} catch (InterruptedException e) {
 						addLog("시간내에 카드 제출함");
+						contentPane.remove(hourGlass);
 						break;
 					}
 				}
